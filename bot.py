@@ -122,6 +122,15 @@ class UserManager:
         storage[user_id].append(item)
         DataManager.save(storage, DATA_FILES['storage'])
 
+    @staticmethod
+    def remove_from_storage(user_id, item_index):
+        storage = DataManager.load(DATA_FILES['storage'])
+        if user_id in storage and 0 <= item_index < len(storage[user_id]):
+            removed_item = storage[user_id].pop(item_index)
+            DataManager.save(storage, DATA_FILES['storage'])
+            return removed_item
+        return None
+
 class KeyboardManager:
     @staticmethod
     def main_menu(is_admin=False):
@@ -160,6 +169,13 @@ class KeyboardManager:
         markup.row("Выдать Экспресс+", "Выдать Супер Пропуск")
         markup.row("Выдать Premium", "Выдать Platinum")
         markup.row("Выдать Silver", "Выдать GOLD")
+        markup.row("◀️ Назад в админ-панель")
+        return markup
+
+    @staticmethod
+    def admin_pass_menu():
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row("Добавить очки пропуска", "Изменить уровень пропуска")
         markup.row("◀️ Назад в админ-панель")
         return markup
 
@@ -219,14 +235,6 @@ class KeyboardManager:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.row("Добавить предмет", "Удалить предмет")
         markup.row("Просмотреть хранилище", "Очистить хранилище")
-        markup.row("◀️ Назад в админ-панель")
-        return markup
-
-    @staticmethod
-    def admin_pass_menu():
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.row("Добавить очки", "Изменить уровень")
-        markup.row("Изменить награды", "Добавить лакидроп")
         markup.row("◀️ Назад в админ-панель")
         return markup
 
@@ -335,7 +343,9 @@ class BotHandler:
             f"💵 Баланс: {user['balance']} ЭБ\n"
             f"☄️ Экспресс+: {'✅ Активен' if user['express_plus'] else '❌ Неактивен'}\n"
             f"💎 Подписка: {user['subscription']}\n"
-            f"💠 Супер Пропуск: {'✅ Активен' if user['super_pass'] else '❌ Неактивен'}"
+            f"💠 Супер Пропуск: {'✅ Активен' if user['super_pass'] else '❌ Неактивен'}\n"
+            f"🎫 Очки пропуска: {user['pass_points']}\n"
+            f"🏆 Уровень пропуска: {user['pass_level']}"
         )
         
         bot.send_message(message.chat.id, profile_text, reply_markup=KeyboardManager.back_to_menu(user['is_admin']))
@@ -644,7 +654,7 @@ class BotHandler:
                 text = "Введите данные товара в формате:\nID_товара Название Цена Описание\n(например: express_plus Экспресс+ 10000 Доступ к аукционам)"
             
             msg = bot.send_message(message.chat.id, text, reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, lambda m: process_add_item(m, shop_type))
+            bot.register_next_step_handler(msg, lambda m: BotHandler.process_add_item(m, shop_type))
         else:
             data = DataManager.load(DATA_FILES[shop_type])
             if not data:
@@ -653,8 +663,9 @@ class BotHandler:
             
             items_text = "\n".join(f"{id}: {item['name']}" for id, item in data.items())
             msg = bot.send_message(message.chat.id, f"Выберите ID товара для удаления:\n\n{items_text}", reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, lambda m: process_remove_item(m, shop_type))
+            bot.register_next_step_handler(msg, lambda m: BotHandler.process_remove_item(m, shop_type))
 
+    @staticmethod
     def process_add_item(message, shop_type):
         try:
             parts = message.text.split(maxsplit=3)
@@ -687,6 +698,7 @@ class BotHandler:
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}\nПопробуйте снова", reply_markup=KeyboardManager.admin_shop_menu())
 
+    @staticmethod
     def process_remove_item(message, shop_type):
         try:
             item_id = message.text.strip()
@@ -791,17 +803,18 @@ class BotHandler:
         
         if message.text == "Просмотреть хранилище":
             msg = bot.send_message(message.chat.id, "Введите ID пользователя для просмотра хранилища:", reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, process_view_storage_admin)
+            bot.register_next_step_handler(msg, BotHandler.process_view_storage_admin)
         elif message.text == "Очистить хранилище":
             msg = bot.send_message(message.chat.id, "Введите ID пользователя для очистки хранилища:", reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, process_clear_storage_admin)
+            bot.register_next_step_handler(msg, BotHandler.process_clear_storage_admin)
         elif message.text == "Добавить предмет":
             msg = bot.send_message(message.chat.id, "Введите ID пользователя и название предмета через пробел:", reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, process_add_item_storage_admin)
+            bot.register_next_step_handler(msg, BotHandler.process_add_item_storage_admin)
         elif message.text == "Удалить предмет":
             msg = bot.send_message(message.chat.id, "Введите ID пользователя для просмотра хранилища:", reply_markup=types.ReplyKeyboardRemove())
-            bot.register_next_step_handler(msg, process_select_user_for_remove_item)
+            bot.register_next_step_handler(msg, BotHandler.process_select_user_for_remove_item)
 
+    @staticmethod
     def process_view_storage_admin(message):
         try:
             target_id = message.text.strip()
@@ -815,6 +828,7 @@ class BotHandler:
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}", reply_markup=KeyboardManager.admin_storage_menu())
 
+    @staticmethod
     def process_clear_storage_admin(message):
         try:
             target_id = message.text.strip()
@@ -829,6 +843,7 @@ class BotHandler:
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}", reply_markup=KeyboardManager.admin_storage_menu())
 
+    @staticmethod
     def process_add_item_storage_admin(message):
         try:
             target_id, item = message.text.split(maxsplit=1)
@@ -843,6 +858,7 @@ class BotHandler:
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}", reply_markup=KeyboardManager.admin_storage_menu())
 
+    @staticmethod
     def process_select_user_for_remove_item(message):
         try:
             target_id = message.text.strip()
@@ -851,12 +867,13 @@ class BotHandler:
             if target_id in storage and storage[target_id]:
                 items_text = "\n".join(f"{i+1}. {item}" for i, item in enumerate(storage[target_id]))
                 msg = bot.send_message(message.chat.id, f"Выберите номер предмета для удаления:\n\n{items_text}", reply_markup=types.ReplyKeyboardRemove())
-                bot.register_next_step_handler(msg, lambda m: process_remove_item_storage_admin(m, target_id))
+                bot.register_next_step_handler(msg, lambda m: BotHandler.process_remove_item_storage_admin(m, target_id))
             else:
                 bot.send_message(message.chat.id, "❌ Хранилище пользователя пусто!", reply_markup=KeyboardManager.admin_storage_menu())
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}", reply_markup=KeyboardManager.admin_storage_menu())
 
+    @staticmethod
     def process_remove_item_storage_admin(message, target_id):
         try:
             item_index = int(message.text.strip()) - 1
@@ -870,6 +887,62 @@ class BotHandler:
                 bot.send_message(message.chat.id, "❌ Неверный номер предмета!", reply_markup=KeyboardManager.admin_storage_menu())
         except Exception as e:
             bot.send_message(message.chat.id, f"❌ Ошибка: {str(e)}", reply_markup=KeyboardManager.admin_storage_menu())
+
+    @staticmethod
+    @bot.message_handler(func=lambda message: message.text in [
+        "Добавить очки пропуска", "Изменить уровень пропуска"
+    ])
+    def handle_pass_management(message):
+        user_id = str(message.from_user.id)
+        user = UserManager.get_user(user_id)
+        
+        if not user or not user['is_admin']:
+            bot.send_message(message.chat.id, "❌ У вас нет прав для этой операции!")
+            return
+        
+        if message.text == "Добавить очки пропуска":
+            msg = bot.send_message(message.chat.id, "Введите ID пользователя и количество очков через пробел:", reply_markup=types.ReplyKeyboardRemove())
+            bot.register_next_step_handler(msg, BotHandler.process_add_pass_points)
+        elif message.text == "Изменить уровень пропуска":
+            msg = bot.send_message(message.chat.id, "Введите ID пользователя и новый уровень пропуска через пробел:", reply_markup=types.ReplyKeyboardRemove())
+            bot.register_next_step_handler(msg, BotHandler.process_change_pass_level)
+
+    @staticmethod
+    def process_add_pass_points(message):
+        try:
+            target_id, points = message.text.split()
+            points = int(points)
+            
+            users = UserManager.get_all_users()
+            if target_id in users:
+                users[target_id]['pass_points'] += points
+                DataManager.save(users, DATA_FILES['users'])
+                bot.send_message(message.chat.id, f"✅ Пользователю {users[target_id]['username']} добавлено {points} очков пропуска!", reply_markup=KeyboardManager.admin_menu())
+            else:
+                bot.send_message(message.chat.id, "❌ Пользователь не найден", reply_markup=KeyboardManager.admin_menu())
+        except:
+            bot.send_message(message.chat.id, "❌ Неверный формат ввода", reply_markup=KeyboardManager.admin_menu())
+
+    @staticmethod
+    def process_change_pass_level(message):
+        try:
+            target_id, level = message.text.split()
+            level = int(level)
+            
+            users = UserManager.get_all_users()
+            pass_data = DataManager.load(DATA_FILES['pass'])
+            
+            if target_id in users:
+                if 1 <= level <= len(pass_data['levels']):
+                    users[target_id]['pass_level'] = level
+                    DataManager.save(users, DATA_FILES['users'])
+                    bot.send_message(message.chat.id, f"✅ Пользователю {users[target_id]['username']} установлен {level} уровень пропуска!", reply_markup=KeyboardManager.admin_menu())
+                else:
+                    bot.send_message(message.chat.id, f"❌ Уровень должен быть от 1 до {len(pass_data['levels'])}", reply_markup=KeyboardManager.admin_menu())
+            else:
+                bot.send_message(message.chat.id, "❌ Пользователь не найден", reply_markup=KeyboardManager.admin_menu())
+        except:
+            bot.send_message(message.chat.id, "❌ Неверный формат ввода", reply_markup=KeyboardManager.admin_menu())
 
     @staticmethod
     @bot.message_handler(func=lambda message: message.text in [
@@ -894,8 +967,9 @@ class BotHandler:
         }[message.text]
         
         msg = bot.send_message(message.chat.id, f"Введите ID пользователя для выдачи {message.text.split()[1]}:", reply_markup=types.ReplyKeyboardRemove())
-        bot.register_next_step_handler(msg, lambda m: process_give_subscription(m, subscription_type))
+        bot.register_next_step_handler(msg, lambda m: BotHandler.process_give_subscription(m, subscription_type))
 
+    @staticmethod
     def process_give_subscription(message, sub_type):
         try:
             target_id = message.text.strip()
